@@ -1,0 +1,33 @@
+- name: Install LXD
+  hosts: all
+  vars:
+    lxd_version: 5.7/stable
+  tasks:
+    - name: Install LXD
+      community.general.snap:
+        name: lxd
+        channel: "{{ lxd_version }}"
+
+- name: Setup first node
+  hosts: bootstrap
+  tasks:
+    - name: Run LXD cluster config on bootstrap node
+      ansible.builtin.command: /snap/bin/lxd init --preseed
+      args:
+        stdin: "{{ lookup('template', 'templates/bootstrap-config.j2') }}"
+      changed_when: false
+    - name: Gather cluster certificate
+      register: bootstrap_cluster_certificate
+      ansible.builtin.slurp:
+        src: /var/snap/lxd/common/lxd/cluster.crt
+
+- name: Setup members nodes
+  hosts: members
+  vars:
+    cluster_certificate: "{{ (hostvars[groups['bootstrap']][0]['bootstrap_cluster_certificate'].content | b64decode) }}"
+  tasks:
+    - name: Run LXD cluster config on members nodes
+      ansible.builtin.command: /snap/bin/lxd init --preseed
+      args:
+        stdin: "{{ lookup('template', 'templates/members-config.j2') }}"
+      changed_when: false
